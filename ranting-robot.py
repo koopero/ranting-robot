@@ -32,7 +32,7 @@ parser.add_argument('-ki', dest='keepImages', action='store_true', help="Don't d
 args = parser.parse_args()
 
 def dieWithError ( error ) :
-	print >> sys.stderr, "HTTP error getting %s (reddit is under heavy load, I guess)" % ( url )
+	print >> sys.stderr, error
 	exit( 1 )
 
 #
@@ -215,7 +215,7 @@ def getVideosFromReddit ( subreddit, pages = 1, after = False ) :
 		except urllib2.HTTPError as e :
 			tries = tries - 1
 			if tries == 0 :
-				print >> sys.stderr, "HTTP error getting %s (reddit is under heavy load, I guess)" % ( url )
+				dieWithError( "HTTP error getting %s (reddit is under heavy load, I guess)" % ( url ) )
 				exit(1)
 			else :
 				print >> sys.stderr, "Reddit choked. Retrying."
