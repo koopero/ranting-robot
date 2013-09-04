@@ -268,6 +268,7 @@ def pushSeq () :
 
 if parseYouTubeLink( args.m ) :
 	song = Video ( args.m )
+	songs = [ song ]
 else:
 	# Pick a random song from reddit.
 	songs = getVideosFromReddit ( args.m )
@@ -367,7 +368,7 @@ if not args.keepImages :
 		os.remove(delete)
 
 if not args.keepVideo :
-	for video in videos :
+	for video in videos + songs :
 		video.deleteFiles()
 
 def softRmDir ( dir ) :
