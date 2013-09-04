@@ -20,14 +20,24 @@ parser.add_argument('subreddits', nargs='+', help='Subreddit from which to grab 
 parser.add_argument('-m', required=True, help='Source for music. Either YouTube link or subreddit.')
 parser.add_argument('-r', dest='resolution', help='Resolution of output. Format [width]x[height].', default='480x360')
 parser.add_argument('-p', type=int, default=1, help='Number of pages to scrape for each video subreddit.')
-parser.add_argument('-o', default='rant.mp4',help='Output file.')
+parser.add_argument('-o', dest='outFile',default='rant.mp4',help='Output file.')
 parser.add_argument('-t', type=float, default=0.8,help='aubioonset threshold.')
 parser.add_argument('-us', dest='useSong', type=float, default=0.0,help='Percentage of cuts to song video.')
 parser.add_argument('-l', type=int, default=300, help='Maxium duration of music, if picking from reddit.')
 parser.add_argument('-fr', dest='frame_rate', type=float, default=29.97, help='Frame rate of output. Default: 29.97' )
 parser.add_argument('-d', dest='directory', help='Working directory')
+
+parser.add_argument('-j', dest='snapshot', help='Snapshot file, also metadata output.')
+parser.add_argument('-s', dest='speed', type=float, default=1.0, help='Speed. 1 = 4 cuts per second average.')
+parser.add_argument('-m0', dest='moshStart', type=float, default=0.0, help='Moshing at start' )
+parser.add_argument('-m1', dest='moshEnd', type=float, default=0.1, help='Moshing at end' )
+parser.add_argument('-vf', dest='youTubeFormat',default='18',help='YouTube format to download.')
+
 parser.add_argument('-kv', dest='keepVideo', action='store_true', help="Don't delete video files.")
 parser.add_argument('-ki', dest='keepImages', action='store_true', help="Don't delete image files.")
+parser.add_argument('-v', dest='verbose', action='store_true', help='List commands being run.')
+parser.add_argument('-q', dest='quiet', action='store_true', help='Stay quiet.')
+
 
 args = parser.parse_args()
 
@@ -63,10 +73,12 @@ def ensureDir ( dir ) :
 ensureDir( imageDir )
 ensureDir( videoDir )
 
-seqGlob = os.path.join( imageDir, 'seq_?????.jpg' )
-seqPattern = os.path.join( imageDir, 'seq_%05d.jpg' )
-outPattern = os.path.join( imageDir, 'out_%05d.jpg' )
-outGlob = os.path.join( imageDir, 'out_?????.jpg' )
+frameFormat = 'png'
+
+seqGlob = os.path.join( imageDir, 'yyz_?????.' + frameFormat )
+seqPattern = os.path.join( imageDir, 'yyz_%05d.' + frameFormat )
+outPattern = os.path.join( imageDir, 'yvr_%05d.' + frameFormat )
+outGlob = os.path.join( imageDir, 'yvr_?????.' + frameFormat )
 
 
 #
@@ -75,8 +87,6 @@ outGlob = os.path.join( imageDir, 'out_?????.jpg' )
 
 frameRate = args.frame_rate
 timePerFrame = 1.0 / frameRate
-
-youTubeFormat = '18'
 
 #
 # Declare Video class and utility functions
@@ -88,10 +98,21 @@ def parseYouTubeLink ( url ) :
 	parse = re.match(r".*?(v=|youtu\.be\/|\/v\/)([^\#\?&\"'>]+)", url )
 	return parse
 
-def command ( args ) :
-	print '`' + ' '.join( args )
-	return subprocess.check_output ( args, stderr=DEVNULL )
+def log ( log ) :
+	if not args.quiet :
+		print >> sys.stderr, log
 
+def command ( cmd ) :
+	cmd = map( str, cmd )
+
+	if args.verbose :
+		print >> sys.stderr, ' '.join( cmd )
+
+	return subprocess.check_output ( cmd, stderr=DEVNULL )
+
+
+
+attribution = []
 
 class Video :
 
@@ -101,9 +122,27 @@ class Video :
 		else :
 			self.url = info['url']
 
-		print "new Video %s" % ( self.url )
+
 		parse = parseYouTubeLink( self.url )
 		self.videoId = parse.group(2)
+		self.cleanUrl = 'http://youtu.be/' + self.videoId
+
+		self.attribution = {}
+		self.attribution['url'] = self.cleanUrl
+
+		if 'permalink' in info :
+			self.attribution["reddit"] = 'http://reddit.com'+info['permalink']
+			
+		if 'title' in info :
+			self.attribution['title'] = info['title']
+
+		global attribution
+		attribution.append ( self.attribution )
+		self.attributionId = len(attribution) - 1
+		
+
+
+
 
 	def getFileName ( self, extension = 'mp4' ) :
 		filename = self.videoId + '.' + extension
@@ -117,11 +156,13 @@ class Video :
 
 		filename = self.getFileName()
 		if not os.path.isfile( filename ) :
+			log ( "Downloading %s" % ( self.cleanUrl ) )
 			command ( [
 				'youtube-dl',
-				'-f', youTubeFormat,
-				'-o', filename,
-				'http://youtu.be/' + self.videoId
+				self.cleanUrl,
+				'-f', args.youTubeFormat,
+				'-o', filename
+				
 			])
 
 		return filename
@@ -206,7 +247,7 @@ def getVideosFromReddit ( subreddit, pages = 1, after = False ) :
 	
 	tries = 15;
 	while True :
-		print "Fetching %s" % ( url)
+		log( "Fetching %s" % ( url ) )
 		try :
 			reddit = json.load( urlopen( url ) )
 			after = reddit['data']['after']
@@ -218,7 +259,7 @@ def getVideosFromReddit ( subreddit, pages = 1, after = False ) :
 				dieWithError( "HTTP error getting %s (reddit is under heavy load, I guess)" % ( url ) )
 				exit(1)
 			else :
-				print >> sys.stderr, "Reddit choked. Retrying."
+				log( "Reddit choked. Retrying." )
 				sleep(2 )
 
 
@@ -275,10 +316,7 @@ else:
 
 	while True :
 		song = random.choice( songs )
-		try :
-			song.getAudioFile()
-		except:
-			continue
+		song.getAudioFile()
 
 		if song.getDuration () > args.l :
 			continue
@@ -286,27 +324,73 @@ else:
 		break
 
 
+
+
+targetCuts = int( song.getDuration() * args.speed * 4 )
+
 #
 # Parse audio file to get cut information
 #
-cuts = command( [ 
-	'aubioonset', 
-	'-i', song.getAudioFile(),
-	'-t', str(args.t) 
-] )
-cuts = cuts.split()
-cuts.append ( song.getDuration() )
+
+threshold = args.t
+while True :
+	log ( 'Running beat detection with threshold %f' % ( threshold ) )
+	cuts = command( [ 
+		'aubioonset', 
+		'-i', song.getAudioFile(),
+		'-t', str(threshold) 
+	] )
+	cuts = cuts.split()
+	cuts.append ( song.getDuration() )
+
+	log ( "%d cuts from aubioonset ( want %d )" % ( len(cuts), targetCuts ) )
+
+	if len(cuts) >= targetCuts or threshold < 0.1 :
+		break
+
+	threshold = threshold - 0.05
+
+
+
+
+
+while len(cuts) > targetCuts :
+	i = random.randrange( 0, len( cuts ) - 1 )
+	cuts.pop( i )
+
+log ( "%d cuts after trim" % ( len(cuts) ) )
+
+#
+#
+#
+
 
 #
 # Get source video links
 #
 videos = []
-
+log ( "Gettting videos")
 for subreddit in args.subreddits :
 	videos = videos + getVideosFromReddit ( subreddit, args.p )
 
+
 frame = 1
+totalFramesEst = int( frameRate * song.getDuration() )
 time  = 0.0
+
+edl = []
+
+
+def saveSnapshot ( stage, frame = 0 ) :
+	if args.snapshot :
+		f = open( args.snapshot, 'w' )
+		json.dump ( {
+			"stage": stage,
+			"frame": frame,
+			"videos": attribution,
+			"edl": edl
+		}, f )
+		f.close()
 
 for cut in cuts :
 	cut = float(cut)
@@ -322,43 +406,109 @@ for cut in cuts :
 		cutstart = time
 	else :
 		while True :
+			videoId = random.randrange( 0, len( videos ) )
+			video = videos[ videoId ]
 			try :
-				video = random.choice( videos )
-				cutstart = video.getCut ( cutlength )
+				video.getVideoFile()
 			except :
+				log ( "Problem downloading %s ( won't try again ) " % ( video.cleanUrl ))
+				videos.pop( videoId )
 				continue
+
+			cutstart = video.getCut ( cutlength )
 
 			if cutstart != False :
 				break
 
+	log ( "Frame %d / %d" % ( frame, totalFramesEst ) )
 	video.makeImageSequence( cutstart, cutlength )
+	frames = pushSeq()
+	
+	cutlength = float( frames ) * timePerFrame
 
-	frames = pushSeq ()
-	time = time + float( frames ) * timePerFrame
+	edl.append( {
+		"i": time,
+		"o": time + cutlength,
+		"t": cutstart,
+		"a": video.attributionId
+	} )
+
+	time = time + cutlength
+
+	saveSnapshot ( 'cut',frame )
+
+
 
 #
-# Resize frames
+# Resize frames and perform pixel-space effects.
 #
-command ( [
+mogrify = [
 	'mogrify',
 	'-resize', args.resolution + '^',
 	'-gravity', 'center',
 	'-extent', args.resolution,
-	outGlob
-])
+	'-type', 'TrueColor'
+]
+
+#mogrify = mogrify + ['-auto-level']
+
+mogrify = mogrify + [ outGlob ]
+
+command ( mogrify )
 
 #
-# Compile output video
+# Compile intermediary video video
 #
+
+aviFile = os.path.join ( imageDir, 'toMosh.avi' )
+
+
 command ( [
 	'ffmpeg',
 	'-y',
-	'-r', str( frameRate),
+	'-r', str( frameRate ),
 	'-f', 'image2', '-i', outPattern,
-	'-i', song.getAudioFile(),
-	'-strict', '-2',
-	args.o
+	'-an', 
+	'-vcodec', 'libxvid',
+	aviFile
 ])
+
+moshedFile = os.path.join ( imageDir, 'moshed.avi' )
+
+command ( [
+	'ruby',
+	os.path.join( os.path.dirname(__file__), 'mosh.rb' ),
+	aviFile,
+	moshedFile,
+	args.moshStart,
+	args.moshEnd
+])
+
+
+def makeFinal ( base, extension ) :
+	cmd = [
+		'ffmpeg',
+		'-y',
+		'-i', moshedFile,
+		'-i', song.getAudioFile()
+	]
+
+	# Put format specific conversion here
+	if extension == 'mp4':
+		cmd = cmd + [ '-strict', '-2' ]
+
+	cmd = cmd + [ base +'.'+extension ]
+	command( cmd )
+
+( dir, file ) = os.path.split( args.outFile )
+( base, ext ) = os.path.splitext( file )
+base = os.path.join( dir, base )
+
+if not ext :
+	makeFinal ( base, 'mp4' )
+	makeFinal ( base, 'ogg' )
+else :
+	makeFinal ( base, ext )
 
 #
 #	Clean up
