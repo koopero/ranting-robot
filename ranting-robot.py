@@ -31,6 +31,7 @@ parser.add_argument('-j', dest='snapshot', help='Snapshot file, also metadata ou
 parser.add_argument('-s', dest='speed', type=float, default=1.0, help='Speed. 1 = 4 cuts per second average.')
 parser.add_argument('-m0', dest='moshStart', type=float, default=0.0, help='Moshing at start' )
 parser.add_argument('-m1', dest='moshEnd', type=float, default=0.1, help='Moshing at end' )
+parser.add_argument('-vf', dest='youTubeFormat',default='18',help='YouTube format to download.')
 
 parser.add_argument('-kv', dest='keepVideo', action='store_true', help="Don't delete video files.")
 parser.add_argument('-ki', dest='keepImages', action='store_true', help="Don't delete image files.")
@@ -85,8 +86,6 @@ outGlob = os.path.join( imageDir, 'yvr_?????.jpg' )
 frameRate = args.frame_rate
 timePerFrame = 1.0 / frameRate
 
-youTubeFormat = '18'
-
 #
 # Declare Video class and utility functions
 #
@@ -101,13 +100,13 @@ def log ( log ) :
 	if not args.quiet :
 		print >> sys.stderr, log
 
-def command ( args ) :
-	args = map( str, args )
+def command ( cmd ) :
+	cmd = map( str, cmd )
 
 	if args.verbose :
-		print >> sys.stderr, ' '.join( args )
-		
-	return subprocess.check_output ( args, stderr=DEVNULL )
+		print >> sys.stderr, ' '.join( cmd )
+
+	return subprocess.check_output ( cmd, stderr=DEVNULL )
 
 
 
@@ -159,7 +158,7 @@ class Video :
 			command ( [
 				'youtube-dl',
 				self.cleanUrl,
-				'-f', youTubeFormat,
+				'-f', args.youTubeFormat,
 				'-o', filename
 				
 			])
@@ -447,7 +446,7 @@ mogrify = [
 	'-extent', args.resolution
 ]
 
-mogrify = mogrify + ['-auto-level']
+#mogrify = mogrify + ['-auto-level']
 
 mogrify = mogrify + [ outGlob ]
 
