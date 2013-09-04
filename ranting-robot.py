@@ -73,10 +73,12 @@ def ensureDir ( dir ) :
 ensureDir( imageDir )
 ensureDir( videoDir )
 
-seqGlob = os.path.join( imageDir, 'yyz_?????.jpg' )
-seqPattern = os.path.join( imageDir, 'yyz_%05d.jpg' )
-outPattern = os.path.join( imageDir, 'yvr_%05d.jpg' )
-outGlob = os.path.join( imageDir, 'yvr_?????.jpg' )
+frameFormat = 'png'
+
+seqGlob = os.path.join( imageDir, 'yyz_?????.' + frameFormat )
+seqPattern = os.path.join( imageDir, 'yyz_%05d.' + frameFormat )
+outPattern = os.path.join( imageDir, 'yvr_%05d.' + frameFormat )
+outGlob = os.path.join( imageDir, 'yvr_?????.' + frameFormat )
 
 
 #
@@ -443,7 +445,8 @@ mogrify = [
 	'mogrify',
 	'-resize', args.resolution + '^',
 	'-gravity', 'center',
-	'-extent', args.resolution
+	'-extent', args.resolution,
+	'-type', 'TrueColor'
 ]
 
 #mogrify = mogrify + ['-auto-level']
@@ -490,7 +493,8 @@ def makeFinal ( base, extension ) :
 	]
 
 	# Put format specific conversion here
-
+	if extension == 'mp4':
+		cmd = cmd + [ '-strict', '-2' ]
 
 	cmd = cmd + [ base +'.'+extension ]
 	command( cmd )
