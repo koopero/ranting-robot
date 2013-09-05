@@ -3,8 +3,8 @@ require 'aviglitch'
 
 inFile = ARGV[0]
 outFile = ARGV[1]
-glitchStart = ARGV[2].to_f
-glitchEnd = ARGV[3].to_f
+glitchStart = ARGV[2].to_f / 100.0
+glitchEnd = ARGV[3].to_f / 100.0
 
 a = AviGlitch.open inFile
 

@@ -55,7 +55,10 @@ cmd = [
 	os.path.join( os.path.dirname(__file__), 'ranting-robot.py' ),
 	'-m', post.url,
 	'-o', f(rantId),
-	'-d', f('tmp')
+	'-d', f('tmp'),
+	'-us', 20,
+	'-m0', 10,
+	'-m1', 80
 ]
 cmd = cmd + rant['videoSubreddits']
 

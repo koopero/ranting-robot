@@ -28,9 +28,9 @@ parser.add_argument('-fr', dest='frame_rate', type=float, default=29.97, help='F
 parser.add_argument('-d', dest='directory', help='Working directory')
 
 parser.add_argument('-j', dest='snapshot', help='Snapshot file, also metadata output.')
-parser.add_argument('-s', dest='speed', type=float, default=1.0, help='Speed. 1 = 4 cuts per second average.')
+parser.add_argument('-s', dest='speed', type=float, default=1.0, help='Speed. 1 = 1 cuts per second average.')
 parser.add_argument('-m0', dest='moshStart', type=float, default=0.0, help='Moshing at start' )
-parser.add_argument('-m1', dest='moshEnd', type=float, default=0.1, help='Moshing at end' )
+parser.add_argument('-m1', dest='moshEnd', type=float, default=10.0, help='Moshing at end' )
 parser.add_argument('-vf', dest='youTubeFormat',default='18',help='YouTube format to download.')
 
 parser.add_argument('-kv', dest='keepVideo', action='store_true', help="Don't delete video files.")
@@ -80,6 +80,8 @@ seqPattern = os.path.join( imageDir, 'yyz_%05d.' + frameFormat )
 outPattern = os.path.join( imageDir, 'yvr_%05d.' + frameFormat )
 outGlob = os.path.join( imageDir, 'yvr_?????.' + frameFormat )
 
+
+STATE = {}
 
 #
 # Set up frame rate
@@ -219,11 +221,17 @@ class Video :
 
 	def makeImageSequence ( self, start, length ) :
 		video = self.getVideoFile()
+
+		timeFine = min( 20.0, start ) 
+		timeRough = start - timeFine
+
+
 		command ( [
 			'ffmpeg',
+			'-ss', timeRough,
 			'-i', video,
-			'-ss', str(start),
-			'-t', str(length),
+			'-ss', timeFine,
+			'-t', length,
 			'-an',
 			'-r', str(frameRate),
 			'-f', 'image2',
@@ -307,6 +315,7 @@ def pushSeq () :
 # Get song
 #
 
+
 if parseYouTubeLink( args.m ) :
 	song = Video ( args.m )
 	songs = [ song ]
@@ -326,7 +335,7 @@ else:
 
 
 
-targetCuts = int( song.getDuration() * args.speed * 4 )
+targetCuts = int( song.getDuration() * args.speed )
 
 #
 # Parse audio file to get cut information
@@ -345,7 +354,7 @@ while True :
 
 	log ( "%d cuts from aubioonset ( want %d )" % ( len(cuts), targetCuts ) )
 
-	if len(cuts) >= targetCuts or threshold < 0.1 :
+	if len(cuts) >= targetCuts * 0.77 or threshold < 0.1 :
 		break
 
 	threshold = threshold - 0.05
@@ -391,6 +400,7 @@ def saveSnapshot ( stage, frame = 0 ) :
 			"edl": edl
 		}, f )
 		f.close()
+
 
 for cut in cuts :
 	cut = float(cut)
@@ -439,6 +449,7 @@ for cut in cuts :
 
 
 
+
 #
 # Resize frames and perform pixel-space effects.
 #
@@ -446,15 +457,21 @@ mogrify = [
 	'mogrify',
 	'-resize', args.resolution + '^',
 	'-gravity', 'center',
-	'-extent', args.resolution,
-	'-type', 'TrueColor'
+	'-extent', args.resolution
 ]
 
-#mogrify = mogrify + ['-auto-level']
+mogrify = mogrify + ['-auto-level']
+
+if frameFormat == 'png' :
+	mogrify = mogrify +	[ '-define', 'png:color-type=2' ]
+
+if frameFormat == 'jpg' :
+	mogrify = mogrify + [ '-define', 'jpeg:preserve-settings' ]
 
 mogrify = mogrify + [ outGlob ]
 
 command ( mogrify )
+
 
 #
 # Compile intermediary video video
@@ -469,9 +486,11 @@ command ( [
 	'-r', str( frameRate ),
 	'-f', 'image2', '-i', outPattern,
 	'-an', 
+	'-qscale', '5',
 	'-vcodec', 'libxvid',
 	aviFile
 ])
+
 
 moshedFile = os.path.join ( imageDir, 'moshed.avi' )
 
